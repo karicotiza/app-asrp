@@ -1,288 +1,270 @@
-"""Speech recognition algorithm."""
+"""Automatic speech recognition pipeline.
 
-from src.placeholders import some_bytes, some_int, some_logic, some_string
+Pseudo-code for universal automatic speech recognition pipeline that can
+handle:
+* One request with very long audio (e. g. 8 hour audio);
+* Infinite amount of requests with small audios (e. g. 1 second of audio every
+second).
+"""
 
-
-class AudioEntity:
-    """Audio entity."""
-
-    def __init__(self, audio_data: bytes) -> None:
-        """Make new instance.
-
-        Args:
-            audio_data (bytes): bytes of audio.
-        """
-        self._audio_data: bytes = audio_data
-
-    @property
-    def audio_data(self) -> bytes:
-        """Get audio data.
-
-        Returns:
-            bytes: bytes of audio.
-        """
-        return self._audio_data
+from typing import Protocol
 
 
-class IdentifierEntity:
-    """Identifier entity."""
-
-    def __init__(self) -> None:
-        """Make new instance."""
-        self._id: str = self._create_uuid()
-
-    @property
-    def id(self) -> str:
-        """Get identifier value.
-
-        Returns:
-            str: identifier value.
-        """
-        return self._id
-
-    def _create_uuid(self) -> str:
-        return some_string
-
-
-class TranscriptionEntity:
-    """Transcription entity."""
-
-    def __init__(
-        self,
-        start: int,
-        end: int,
-        text: str,
-    ):
-        """Make new instance.
-
-        Args:
-            start (int): start of transcription in audio.
-            end (int): end of transcription in audio.
-            text (str): text of the transcription.
-        """
-        self._start: int = start
-        self._end: int = end
-        self._text: str = text
-
-    @property
-    def start(self) -> int:
-        """Transcription start time in milliseconds.
-
-        Returns:
-            int: start time in milliseconds
-        """
-        return self._start
-
-    @property
-    def end(self) -> int:
-        """Transcription end time in milliseconds.
-
-        Returns:
-            int: end time in milliseconds
-        """
-        return self._end
-
-    @property
-    def text(self) -> str:
-        """Transcription text.
-
-        Returns:
-            str: text.
-        """
-        return self._text
-
-
-class AudioQueueService:
-    """Audio queue service."""
-
-    def __init__(self) -> None:
-        """Make new instance."""
-        self._audio_queue: bytes = some_bytes
-
-    async def dequeue(self, duration_in_milliseconds: int) -> AudioEntity:
-        """Dequeue (get and delete from the beginning) audio entity.
-
-        Args:
-            duration_in_milliseconds (int): chunk duration.
-
-        Returns:
-            AudioEntity: audio entity, if there is left any.
-        """
-        return AudioEntity(some_bytes)
-
-    async def enqueue(self, audio: AudioEntity) -> None:
-        """Enqueue (append to the end) audio entity.
-
-        Args:
-            audio (AudioEntity): audio entity.
-        """
-        self._audio_queue += audio.audio_data
-
-    async def not_empty(self) -> bool:
-        """Check if queue not empty.
-
-        Returns:
-            bool: true if not empty
-        """
-        return bool(self._audio_queue)
-
-
-class TranscriptionQueueService:
-    """Transcription queue service."""
-
-    def __init__(self) -> None:
-        """Make new instance."""
-        self._transcription_queue: list[TranscriptionEntity] = []
-
-    async def dequeue(self) -> list[TranscriptionEntity]:
-        """Dequeue (get and delete from the beginning) transcription entities.
-
-        Returns:
-            AudioEntity: audio entity, if there is left any.
-        """
-        memory: list[TranscriptionEntity] = []
-
-        while self._transcription_queue:
-            memory.append(self._transcription_queue.pop())
-
-        return memory
-
-    async def enqueue(self, transcriptions: list[TranscriptionEntity]) -> None:
-        """Enqueue (append to the end) transcription entity.
-
-        Args:
-            transcriptions (list[TranscriptionEntity]): list of transcription \
-                entities.
-        """
-        self._transcription_queue += transcriptions
-
-
-class AudioRecognitionService:
-    """Audio recognition service."""
-
-    async def transcribe(self, audio: AudioEntity) -> str:
-        """Get transcription of audio.
-
-        Args:
-            audio (AudioEntity): audio entity.
-
-        Returns:
-            str: transcription of audio.
-        """
-        return some_string
-
-
+# Domain
 class SessionEntity:
     """Session entity."""
 
     def __init__(self) -> None:
-        """Make new instance."""
-        self._audio_queue: AudioQueueService = AudioQueueService()
-        self._transcription_queue: TranscriptionQueueService = (
-            TranscriptionQueueService()
-        )
-
-        self._audio_recognition: AudioRecognitionService = (
-            AudioRecognitionService()
-        )
+        """Create new instance."""
+        self._data: bytes = b''  # noqa: WPS110
+        self._amount_of_processed_audios: int = 0
+        self._amount_of_unprocessed_audios: int = 0
+        self._transcriptions: list[str] = []
 
     @property
-    def audio_queue(self) -> AudioQueueService:
-        """Get audio queue.
+    def amount_of_processed_audios(self) -> int:
+        """Get amount of processed audios.
 
         Returns:
-            AudioQueueService: audio queue service.
+            int: amount of processed audios.
         """
-        return self._audio_queue
+        return self._amount_of_processed_audios
 
     @property
-    def transcription_queue(self) -> TranscriptionQueueService:
-        """Get transcription queue.
+    def amount_of_unprocessed_audios(self) -> int:
+        """Get amount of unprocessed audios.
 
         Returns:
-            TranscriptionQueueService: transcription queue service.
+            int: amount of unprocessed audios.
         """
-        return self._transcription_queue
+        return self._amount_of_unprocessed_audios
 
-    async def process(self) -> None:
-        """Process audio queue until it's empty."""
-        while self._audio_queue.not_empty():
-            audio: AudioEntity = await self._audio_queue.dequeue(some_int)
-            transcription: TranscriptionEntity = TranscriptionEntity(
-                some_int,
-                some_int,
-                await self._audio_recognition.transcribe(audio),
-            )
-            await self._transcription_queue.enqueue([transcription])
-
-
-class SessionRepository:
-    """Session repository."""
-
-    async def create(self, identifier: IdentifierEntity) -> None:
-        """Create session.
+    def append_audio(self, audio: bytes) -> None:
+        """Append audio to session.
 
         Args:
-            identifier (IdentifierEntity): session identifier entity.
+            audio (bytes): bytes of audio.
         """
-        await some_logic()
+        pass  # noqa: WPS420
 
-    async def read(self, identifier: IdentifierEntity) -> SessionEntity:
-        """Read session.
-
-        Args:
-            identifier (IdentifierEntity): identifier entity.
+    def retrieve_transcriptions(self) -> list[str]:
+        """Retrieve transcriptions.
 
         Returns:
-            SessionEntity: session entity.
+            list[str]: transcriptions.
         """
-        return SessionEntity()
+        return self._transcriptions
 
 
+class SessionFactory:
+    """Session factory."""
+
+    def create(self) -> tuple[int, SessionEntity]:
+        """Create pair of pk and session entity.
+
+        Returns:
+            tuple[int, SessionEntity]: pk and session entity.
+        """
+        return (self._create_random_pk(), SessionEntity())
+
+    def _create_random_pk(self) -> int:
+        return 0
+
+
+class SessionRepositoryInterface(Protocol):
+    """Session repository interface."""
+
+    def create(self, pk: int, session: SessionEntity) -> None:
+        """Abstract creation of a new session.
+
+        Args:
+            pk (int): primary key.
+            session (SessionEntity): session entity.
+        """
+        pass  # noqa: WPS420
+
+    def retrieve(self, pk: int) -> SessionEntity:
+        """Retrieve session.
+
+        Args:
+            pk (int): primary key.
+        """
+        pass  # noqa: WPS420
+
+
+# Application
 class CreateSessionUseCase:
-    """Upload audio use case."""
+    """Create session use case."""
 
-    async def command(self) -> IdentifierEntity:
+    def execute(self, repository: SessionRepositoryInterface) -> int:
         """Do use case.
 
+        Args:
+            repository (SessionRepositoryInterface): any session repository.
+
         Returns:
-            IdentifierEntity: identifier entity.
+            int: primary key of created session entity.
         """
-        identifier: IdentifierEntity = IdentifierEntity()
-        await SessionRepository().create(identifier)
-        return identifier
+        pk, session = SessionFactory().create()
+        repository.create(pk, session)
+        return pk
+
+
+class RetrieveSessionStatisticUseCase:
+    """Retrieve session statistics use case."""
+
+    def execute(
+        self,
+        repository: SessionRepositoryInterface,
+        pk: int,
+    ) -> tuple[int, int]:
+        """Do use case.
+
+        Args:
+            repository (SessionRepositoryInterface): any session repository.
+            pk (int): primary key.
+
+        Returns:
+            tuple[int, int]: amount of processed and unprocessed audios.
+        """
+        session: SessionEntity = repository.retrieve(pk)
+
+        return (
+            session.amount_of_processed_audios,
+            session.amount_of_unprocessed_audios,
+        )
 
 
 class AddAudioToSessionUseCase:
     """Add audio to session use case."""
 
-    async def command(
-        self, identifier: IdentifierEntity, audio: AudioEntity,
+    def execute(
+        self,
+        repository: SessionRepositoryInterface,
+        pk: int,
+        audio: bytes,
     ) -> None:
         """Do use case.
 
         Args:
-            identifier (IdentifierEntity): identifier entity.
-            audio (AudioEntity): audio entity.
+            repository (SessionRepositoryInterface): any session repository.
+            pk (int): primary key.
+            audio (bytes): bytes of audio.
         """
-        session: SessionEntity = await SessionRepository().read(identifier)
-        await session.audio_queue.enqueue(audio)
-        await session.process()
+        session: SessionEntity = repository.retrieve(pk)
+        session.append_audio(audio)
 
 
-class GetTranscriptionsFromSessionUseCase:
-    """Get audio from session use case."""
+class RetrieveTranscriptionsOfSessionUseCase:
+    """Retrieve transcriptions of session."""
 
-    async def command(
-        self, identifier: IdentifierEntity,
-    ) -> list[TranscriptionEntity]:
+    def execute(
+        self,
+        repository: SessionRepositoryInterface,
+        pk: int,
+    ) -> list[str]:
         """Do use case.
 
         Args:
-            identifier (IdentifierEntity): identifier entity.
+            repository (SessionRepositoryInterface): any session repository.
+            pk (int): primary key
 
         Returns:
-            list[TranscriptionEntity]: list of transcription entities.
+            list[str]: transcriptions.
         """
-        session: SessionEntity = await SessionRepository().read(identifier)
-        return await session.transcription_queue.dequeue()
+        session: SessionEntity = repository.retrieve(pk)
+        return session.retrieve_transcriptions()
+
+
+# Infrastructure
+class SessionRepository:
+    """Session repository."""
+
+    _db: dict[int, SessionEntity] = {}
+
+    def create(self, pk: int, session: SessionEntity) -> None:
+        """Create new session.
+
+        Args:
+            pk (int): primary key.
+            session (SessionEntity): session entity.
+        """
+        self._db[pk] = session
+
+    def retrieve(self, pk: int) -> SessionEntity:
+        """Retrieve session.
+
+        Args:
+            pk (int): primary key.
+
+        Returns:
+            SessionEntity: session entity.
+        """
+        return self._db[pk]
+
+
+# User Interface
+class Controller:
+    """Controller."""
+
+    _session_repository: SessionRepositoryInterface = SessionRepository()
+
+    def create_session(self) -> dict[str, int]:
+        """Create (post) session endpoint.
+
+        Returns:
+            dict[str, int]: response body.
+        """
+        return {
+            'pk': CreateSessionUseCase().execute(self._session_repository),
+        }
+
+    def retrieve_session_statistics(self, pk: int) -> dict[str, int]:
+        """Retrieve (get) session statistics.
+
+        Args:
+            pk (int): primary key of session entity.
+
+        Returns:
+            dict[str, int]: response body
+        """
+        processed, unprocessed = RetrieveSessionStatisticUseCase().execute(
+            self._session_repository, pk,
+        )
+
+        return {
+            'processed': processed,
+            'in_process': unprocessed,
+        }
+
+    def add_audio(self, pk: int, audio: bytes) -> dict[str, str]:
+        """Add (post) audio to session.
+
+        Args:
+            pk (int): primary key of session entity.
+            audio (bytes): bytes of audio.
+
+        Returns:
+            dict[str, int]: response body
+        """
+        AddAudioToSessionUseCase().execute(self._session_repository, pk, audio)
+        return {'status': 'ok'}
+
+    def retrieve_transcriptions(self, pk: int) -> dict[str, list[str]]:
+        """Retrieve (get) transcriptions of session.
+
+        Args:
+            pk (int): primary key of session
+
+        Returns:
+            dict[str, str]: response body.
+        """
+        return {
+            'transcriptions': RetrieveTranscriptionsOfSessionUseCase().execute(
+                self._session_repository, pk,
+            ),
+        }
+
+
+if __name__ == '__main__':
+    controller: Controller = Controller()
