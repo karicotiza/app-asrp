@@ -93,6 +93,14 @@ class SessionRepositoryInterface(Protocol):
 
 
 # Application
+class Worker:
+    """Worker (event handler)."""
+
+    def run_in_thread(self) -> None:
+        """Run worker in thread."""
+        pass  # noqa: WPS420
+
+
 class CreateSessionUseCase:
     """Create session use case."""
 
@@ -268,3 +276,5 @@ class Controller:
 
 if __name__ == '__main__':
     controller: Controller = Controller()
+    worker: Worker = Worker()
+    worker.run_in_thread()
